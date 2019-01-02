@@ -1,0 +1,7 @@
+[package]
+name = "dropper"
+version = "0.1.0"
+authors = ["Dropper Dev Team <dropper@pattyjog.al>"]
+
+[dependencies]
+html5ever = "0.22.5"
