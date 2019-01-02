@@ -4,6 +4,12 @@
 
 use std::collections::HashMap;
 
+struct BukkitHTMLPluginParser {
+    search_url: &str,
+    list_selector: &str,
+    item_selector: &str
+}
+
 /// A basic plugin parser trait that is implemented with a parser, and outputs JAR file URLs.
 trait PluginParser {
     /// Returns a new instance of the plugin parser
@@ -11,14 +17,28 @@ trait PluginParser {
     /// # Arguments
     ///
     /// * `search_url` - A URL ending before the fragment where the parser can query for plugin search terms.
-    fn new(search_url: &str) -> Self;
+    fn new(&self, search_url: &str) -> Self;
 
     /// Searches the search_url for a plugin keyword, and returns a `HashMap` of plugin names to install page URLs.
-    fn search(query: &str) -> HashMap<&str, &str>;
+    fn search(&self, query: &str) -> HashMap<&str, &str>;
 
-    /// Fetches a download link from a specific package name and version. Returns the package URL
+    /// Fetches a download link from a specific package name and version. Returns the package URL.
     ///
-    /// This should internally use `search` to get the correct URL for the package.
-    fn fetch(package_name: &str, version_code: &str) -> &str;
+    /// *Note*: `package_name` has to be specifically formatted for the website being used. This name will be slipped into a URL to download the package in this function.
+    fn fetch(&self, package_name: &str, version_code: &str) -> &str;
+}
 
+/// An extenstion of the basic PluginParser that parses HTML plugin websites for their plugins.
+trait HTMLPluginParser {
+    /// Returns a new instance of the HTML enabled plugin parser
+    ///
+    /// # Arguments
+    ///
+    /// * `search_url` - A URL ending before the fragment where the parser can query for plugin search terms.
+    /// * `list_selector` - A [selector](https://www.w3schools.com/cssref/css_selectors.asp) for the search results container
+    /// * `item_selector` - A selector
+    fn new(&self, search_url: &str, list_selector: &str, item_selector: &str) -> Self;
+
+    /// Takes the output of the name selector and somehow transforms it into a name that can be used to fetch the package later.
+    fn transform_package_name(package_text: &str) -> &str;
 }
