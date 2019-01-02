@@ -17,7 +17,7 @@ trait PluginParser {
     /// # Arguments
     ///
     /// * `search_url` - A URL ending before the fragment where the parser can query for plugin search terms.
-    fn new(&self, search_url: &str) -> Self;
+    fn new(search_url: &str) -> Self;
 
     /// Searches the search_url for a plugin keyword, and returns a `HashMap` of plugin names to install page URLs.
     fn search(&self, query: &str) -> HashMap<&str, &str>;
@@ -29,7 +29,7 @@ trait PluginParser {
 }
 
 /// An extenstion of the basic PluginParser that parses HTML plugin websites for their plugins.
-trait HTMLPluginParser {
+trait HTMLPluginParser: PluginParser {
     /// Returns a new instance of the HTML enabled plugin parser
     ///
     /// # Arguments
@@ -37,8 +37,14 @@ trait HTMLPluginParser {
     /// * `search_url` - A URL ending before the fragment where the parser can query for plugin search terms.
     /// * `list_selector` - A [selector](https://www.w3schools.com/cssref/css_selectors.asp) for the search results container
     /// * `item_selector` - A selector
-    fn new(&self, search_url: &str, list_selector: &str, item_selector: &str) -> Self;
+    fn new(search_url: &str, list_selector: &str, item_selector: &str) -> Self;
 
     /// Takes the output of the name selector and somehow transforms it into a name that can be used to fetch the package later.
     fn transform_package_name(package_text: &str) -> &str;
+}
+
+
+/// Implement an HTMLPluginParser for Bukkit
+impl HTMLPluginParser for BukkitHTMLPluginParser {
+
 }
