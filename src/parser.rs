@@ -88,4 +88,12 @@ impl HTMLPluginParser for BukkitHTMLPluginParser {
             item_selector: item_selector,
         }
     }
+
+    fn fetch(&self, package_name: &str, version_code: &str) -> &str {
+        ""
+    }
+
+    fn transform_package_name(package_text: &str) -> &str {
+        ""
+    }
 }
