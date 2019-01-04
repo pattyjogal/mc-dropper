@@ -2,7 +2,6 @@
 //!
 //! Plugin parsers have two modi operandi: either users can search for install terms, like "World", and come back with a list of plugins to install, or they can specify a specific version, like `WorldEdit = "6.19"`.
 
-
 use curl::http;
 use scraper::{Html, Selector};
 use std::collections::HashMap;
@@ -25,13 +24,18 @@ trait PluginFetchable {
     fn fetch(&self, package_name: &str, version_code: &str) -> &str;
 }
 
-
 trait HTMLPluginScrapable {
     /// Takes the output of the name selector and somehow transforms it into a name that can be used to fetch the package later.
     fn transform_package_name(package_text: &str) -> &str;
 
     /// Given a query, use the list_selector and item_selector to render a map of names to links
-    fn scrape_links_from_list(&self, query: &str, search_url: &str, list_selector: &str, item_selector: &str) -> HashMap<&str, &str> {
+    fn scrape_links_from_list(
+        &self,
+        query: &str,
+        search_url: &str,
+        list_selector: &str,
+        item_selector: &str,
+    ) -> HashMap<&str, &str> {
         // Construct a URL that allows us to search the website
         let built_url = str::replace(search_url, "{}", query);
 
@@ -63,10 +67,13 @@ trait HTMLPluginScrapable {
         };
 
         for element in results_container.select(&link_selector) {
-            println!("{}", match element.value().attr("href") {
-                Some(link) => link,
-                None       => "",
-            });
+            println!(
+                "{}",
+                match element.value().attr("href") {
+                    Some(link) => link,
+                    None => "",
+                }
+            );
         }
 
         pkgs_to_urls
@@ -81,15 +88,18 @@ impl BukkitHTMLPluginParser {
     /// * `search_url` - A URL for the search page where `{}` replaces the query position
     /// * `list_selector` - A [selector](https://www.w3schools.com/cssref/css_selectors.asp) for the search results container
     /// * `item_selector` - A selector for each item's name/link
-    pub fn new(search_url: &'static str, list_selector: &'static str, item_selector: &'static str) -> Self {
+    pub fn new(
+        search_url: &'static str,
+        list_selector: &'static str,
+        item_selector: &'static str,
+    ) -> Self {
         BukkitHTMLPluginParser {
             search_url: search_url,
             list_selector: list_selector,
-            item_selector: item_selector
+            item_selector: item_selector,
         }
     }
 }
-
 
 /// Add the plugin scraping capabilities
 impl HTMLPluginScrapable for BukkitHTMLPluginParser {
