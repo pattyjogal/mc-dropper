@@ -2,6 +2,7 @@
 extern crate reqwest;
 extern crate scraper;
 extern crate regex;
+extern crate yaml_rust;
 
 pub mod parser;
 pub mod backend;
