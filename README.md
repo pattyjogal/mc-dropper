@@ -1,8 +1,8 @@
 # Dropper
-## A Minecraft Server Package Manager
+### A Minecraft Server Package Manager
 
 <p align="center">
-  <img src="https://minecraft.gamepedia.com/File:Dropper.png"/>
+  <img src="https://d1u5p3l4wpay3k.cloudfront.net/minecraft_gamepedia/8/8d/Dropper.png?version=545724d0fc82921721863cd746a8c341"/>
 </p>
 
 This project came from a desire to simplify running a Minecraft server. It aims
@@ -24,7 +24,7 @@ The project is written in the Rust language. This is to minimize runtime errors 
 easily compile to Linux, Windows, and Mac targets. If you wish to page through the
 source, you will want to get familiar with Rust somewhere: I suggest the [Rust Book](https://doc.rust-lang.org/stable/book/).
 
-# Installation
+## Installation
 At time of writing, this crate has not been uploaded to Cargo, nor have I published
 binaries. This is simply because it's not ready yet.
 
@@ -51,7 +51,7 @@ and then your arguments. For instance, if I wanted to run my program with the ar
 cargo run -- add WorldEdit@6.1.9
 ```
 
-# Project Documentation
+## Project Documentation
 This project comes with documentation! Hooray! Rust provides an easy to use
 [documentation spec](https://doc.rust-lang.org/rust-by-example/meta/doc.html)
 that even supports Markdown. I not only encourage you to use it, but it is a requirement
@@ -65,7 +65,7 @@ cargo doc
 which will dump the files to a `target/doc/dropper` folder. Open up the `index.html` file
 there to view the docs in the browser.
 
-# Project Wishlist
+## Project Wishlist
 The big thing that this project needs is a command line interface for users to work with.
 Ideally, this would be super simple and the documentation behind it would be ultra
 understandable, since there are a sizeable amount of younger MC server enthusiasts who are
