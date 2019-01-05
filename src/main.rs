@@ -1,10 +1,10 @@
+//! Dropper - A Minecraft Package Manager
 extern crate reqwest;
 extern crate scraper;
 extern crate regex;
-extern crate argparse;
 
-mod parser;
-mod backend;
+pub mod parser;
+pub mod backend;
 
 use parser::PluginSearchable;
 use parser::PluginFetchable;
