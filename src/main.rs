@@ -6,6 +6,7 @@ mod parser;
 
 use parser::HTMLPluginScrapable;
 use parser::PluginSearchable;
+use parser::PluginFetchable;
 
 fn main() {
     println!("Hello, world!");
@@ -16,4 +17,9 @@ fn main() {
     for (key, value) in map.iter() {
         println!("{} -> {}", key, value);
     }
+
+    match x.fetch("silkspawners", "5.0.2") {
+        Some(url) => println!("Install your package at: {}", url),
+        None      => println!("I'm sorry! We couldn't find that version")
+    };
 }
