@@ -24,6 +24,13 @@ fn main() {
 
     match PackageBackend::init() {
         Ok(_) => println!("Success! Dropper files have been all set up!"),
-        Err(e) => println!("Could not complete setup: {}", e)
+        Err(e) => println!("Could not complete setup: {}", e),
     };
+
+    println!("Now that setup is done, let's validate the files:");
+
+    match PackageBackend::validate() {
+        Ok(_) => println!("All YAML looks valid to me!"),
+        Err(e) => println!("Error encountered: {}", e),
+    }
 }
