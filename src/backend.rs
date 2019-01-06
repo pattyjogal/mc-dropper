@@ -15,13 +15,27 @@
 //! * Newest Minor: `WorldEdit: 6.*` / `WorldEdit@6.*`
 //! * Newest Major (Newest release): `WorldEdit: *` / `WorldEdit`
 
-use std::path::Path;
+use std::{fmt, fs};
+use std::error::Error;
 use std::fs::File;
-use std::io::{Error, ErrorKind, Read};
+use std::fs::OpenOptions;
+use std::io::{ErrorKind, Read, Write};
 use yaml_rust::YamlLoader;
 
+const CONFIG_ROOT: &'static str = "./.dropper";
 const CONFIG_PATH: &'static str = "./.dropper/config.yml";
-const YamlValidationError: Error = Error::new(ErrorKind::Other, "Invalid YAML file");
+const PKG_LIST_PATH: &'static str = "./pkg.yml";
+
+#[derive(Debug)]
+struct YamlValidationError;
+
+impl Error for YamlValidationError {}
+
+impl fmt::Display for YamlValidationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "YAML was not valid")
+    }
+}
 
 /// Some status enums to represent the outcome of each function:
 ///
@@ -42,46 +56,64 @@ struct PackageBackend {
 }
 
 impl PackageBackend {
-    /// The initalization function for the backend. This is performed on the first run, and verified
-    /// on each subsequent run.
+    /// The initalization function for the backend. This is performed only on the first run, or if the .dropper folder is ever deleted
     ///
     /// This creates a folder at the server root caled .dropper, and in it, places a default config file
     /// called `config.yml`, as well as a SQLite DB for keeping track of package installs.
     ///
-    /// It also dumps a blank `pkg.yml` to the server root directory
+    /// It also dumps a blank `pkg.yml` to the server root directory if it does not exist yet.
     ///
     /// # Errors
     /// The only error this function can throw is if it detects that the config/pkg files are corrupt or
     /// malformed. The interface should handle what happens at this point (e.g. display the YML validation
     /// output, or prompt them if they wish to re-initialize)
-    pub fn init() -> Result<PackageStatus, PackageStatus> {
+    pub fn init() -> Result<(), Box<Error>> {
+        // Create the directory for the config files
+        fs::create_dir(CONFIG_ROOT)?;
+
+        // Dump a default config file in there
+        let mut config = File::create(CONFIG_PATH)?;
+        // TODO: file.write_all(...)
+
+        // Create a pkg.yml if one does not exist yet
+        let pkg_list = OpenOptions::new().create_new(true)
+                                         .open(PKG_LIST_PATH)?;
+
+       Ok(())
     }
 
-    /// Internal helper function to validate the existance of the config file
+    /// Ensures that the
+    pub fn validate() -> Result<(), Box<Error>> {
+        PackageBackend::read_yaml_file(CONFIG_PATH)?;
+        PackageBackend::read_yaml_file(PKG_LIST_PATH)?;
+        Ok(())
+    }
+
+    /// Internal helper function to validate the existance of a YAML file
     ///
     /// # Possible Results
     /// * Ok(Some(Yaml)) - The config file exists and is returned as a Yaml
     /// * Ok(None) - The config file does not exist at all
     /// * Err(Error) - The config file exists and is invalid, or an IO error occured
-    fn read_config_file() -> Result<Option<yaml_rust::Yaml>, Error> {
-        let file = match File::open(CONFIG_PATH) {
+    fn read_yaml_file(path: &str) -> Result<Option<Vec<yaml_rust::Yaml>>, Box<Error>> {
+        let mut file = match File::open(path) {
             Ok(f) => f,
             Err(e) => return match e.kind() {
                 // If the file couldn't be found, that's ok and we return a None
                 // Otherwise, we return the other IO error that we encountered
-                NotFound => Ok(None),
-                _ => Err(e)
+                ErrorKind::NotFound => Ok(None),
+                _ => Err(Box::new(e))
             }
         };
 
-        let contents = String::new();
+        let mut contents = String::new();
         file.read_to_string(&mut contents)?;
 
         // Either return the Yaml object we get (and the only first document at that),
         // or return a validation error if YamlLoader is not able to parse.
         match YamlLoader::load_from_str(&contents) {
-            Ok(yaml) => Ok(Some(yaml[0])),
-            Err(_e) => Err(YamlValidationError)
+            Ok(yaml) => Ok(Some(yaml)),
+            Err(_e) => Err(Box::new(YamlValidationError))
         }
     }
 
