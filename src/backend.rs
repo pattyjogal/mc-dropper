@@ -17,8 +17,8 @@
 use std::error::Error;
 use std::fs::File;
 use std::fs::OpenOptions;
-use std::io::{ErrorKind, Read, Write};
-use std::{fmt, fs};
+use std::io::{Read, Write};
+use std::{fmt, fs, io};
 use std::path::Path;
 use yaml_rust::YamlLoader;
 
@@ -27,27 +27,19 @@ const CONFIG_PATH: &'static str = "./.dropper/config.yml";
 const PKG_LIST_PATH: &'static str = "./pkg.yml";
 
 #[derive(Debug)]
-pub struct YamlValidationError;
-
-impl Error for YamlValidationError {}
-
-impl fmt::Display for YamlValidationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "YAML was not valid")
-    }
+pub enum ErrorKind {
+    // Something when wrong while trying to parse the YAML file. Expects the filename as a param.
+    YamlInvalid(String),
 }
 
-/// Some status enums to represent the outcome of each function:
-///
-/// * `OperationSuccess` - Everything went well and the requested action was performed
-/// * `OperationNothingToDo` - No action was performed because there was nothing to do
-/// * `OperationMalformed` - The package specifier was not parsable
-/// * `OperationNotFound` - The requested package was not found online
-pub enum PackageStatus {
-    OperationSuccess,
-    OperationNothingToDo,
-    OperationMalformed,
-    OperationNotFound,
+impl Error for ErrorKind {}
+
+impl fmt::Display for ErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", match self {
+            ErrorKind::YamlInvalid(s) => format!("invalid YAML syntax on file {}", s)
+        })
+    }
 }
 
 /// Struct to hold the configuration information for the backend
@@ -68,10 +60,13 @@ impl PackageBackend {
     /// so it is advised to prompt the user before running this! The interface should check to see if
     /// a non-empty `.dropper` exists before running this, prompting the user if so.
     ///
-    /// # Errors
+    /// # Behavior
     /// The only error this function can throw is if it detects that the config/pkg files are corrupt or
     /// malformed. The interface should handle what happens at this point (e.g. display the YML validation
     /// output, or prompt them if they wish to re-initialize)
+    ///
+    /// # Errors
+    /// * `std::io::ErrorKind::*` - an IO error occured
     pub fn init() -> Result<(), Box<Error>> {
         // Create the directory for the config files
         if Path::new(CONFIG_ROOT).exists() {
@@ -92,7 +87,11 @@ impl PackageBackend {
         Ok(())
     }
 
-    /// Ensures that the
+    /// Ensures that the config files both exist and can be read
+    ///
+    /// # Errors
+    /// * [`ErrorKind::YamlInvalid`](enum.ErrorKind.html#variant.YamlInvalid) - one of the YML files is invalid
+    /// * `std::io::ErrorKind::*` - an IO error occured
     pub fn validate() -> Result<(), Box<Error>> {
         PackageBackend::read_yaml_file(CONFIG_PATH)?;
         PackageBackend::read_yaml_file(PKG_LIST_PATH)?;
@@ -102,17 +101,21 @@ impl PackageBackend {
     /// Internal helper function to validate the existance of a YAML file
     ///
     /// # Possible Results
-    /// * Ok(Some(Yaml)) - The config file exists and is returned as a Yaml
+    /// * Ok(Some(Vec<Yaml>)) - The config file exists and is returned as a YAML doc list
     /// * Ok(None) - The config file does not exist at all
     /// * Err(Error) - The config file exists and is invalid, or an IO error occured
-    fn read_yaml_file(path: &str) -> Result<Option<Vec<yaml_rust::Yaml>>, Box<Error>> {
+    ///
+    /// # Errors
+    /// * [`ErrorKind::YamlInvalid`](enum.ErrorKind.html#variant.YamlInvalid) - one of the YML files is invalid
+    /// * `std::io::ErrorKind::*` - an IO error occured
+    fn read_yaml_file(path: &'static str) -> Result<Option<Vec<yaml_rust::Yaml>>, Box<Error>> {
         let mut file = match File::open(path) {
             Ok(f) => f,
             Err(e) => {
                 return match e.kind() {
                     // If the file couldn't be found, that's ok and we return a None
                     // Otherwise, we return the other IO error that we encountered
-                    ErrorKind::NotFound => Ok(None),
+                    io::ErrorKind::NotFound => Ok(None),
                     _ => Err(Box::new(e)),
                 }
             }
@@ -125,7 +128,7 @@ impl PackageBackend {
         // or return a validation error if YamlLoader is not able to parse.
         match YamlLoader::load_from_str(&contents) {
             Ok(yaml) => Ok(Some(yaml)),
-            Err(_e) => Err(Box::new(YamlValidationError)),
+            Err(_e) => Err(Box::new(ErrorKind::YamlInvalid(path.to_string()))),
         }
     }
 
@@ -140,7 +143,7 @@ impl PackageBackend {
     /// # Errors
     /// If the package specifier was invalid, or valid but not found, the Result returned will contain
     /// an error, and it will need to be handled in whatever frontend is being used.
-    fn pkg_add(&self, pkg_specifier: &str) -> Result<PackageStatus, PackageStatus> {
+    fn pkg_add(&self, pkg_specifier: &str) -> Result<bool, Box<Error>> {
         unimplemented!();
     }
 
@@ -153,9 +156,8 @@ impl PackageBackend {
     ///                     to add. It should be in the package specifier format defined above.
     ///
     /// # Errors
-    /// If the package specifier was invalid, or valid but not found, the Result returned will contain
-    /// an error, and it will need to be handled in whatever frontend is being used.
-    fn pkg_install(&self, pkg_specifier: &str) -> Result<PackageStatus, PackageStatus> {
+    /// *
+    fn pkg_install(&self, pkg_specifier: &str) -> Result<bool, Box<Error>> {
         unimplemented!();
     }
 
@@ -172,7 +174,7 @@ impl PackageBackend {
     /// used.
     ///
     /// Additionally, this function can return a `OperationNothingToDo` if the package is already  up to date.
-    fn pkg_update(&self, pkg_specifier: &str) -> Result<PackageStatus, PackageStatus> {
+    fn pkg_update(&self, pkg_specifier: &str) -> Result<bool, Box<Error>> {
         unimplemented!();
     }
 }
