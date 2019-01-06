@@ -9,6 +9,7 @@ pub mod backend;
 
 use parser::PluginSearchable;
 use parser::PluginFetchable;
+use backend::PackageBackend;
 
 fn main() {
     println!("Hello, world!");
@@ -19,5 +20,10 @@ fn main() {
     match x.fetch("worldedit", "6.1.9") {
         Some(url) => println!("Install your package at: {}", url),
         None      => println!("I'm sorry! We couldn't find that version")
+    };
+
+    match PackageBackend::init() {
+        Ok(_) => println!("Success! Dropper files have been all set up!"),
+        Err(e) => println!("Could not complete setup: {}", e)
     };
 }

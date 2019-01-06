@@ -3,7 +3,6 @@
 //! This will use a little SQLite interface in order to keep track of what's been installed such
 //! that package updating and removal will be easy.
 
-
 //! # Package Specification
 //! One of the key points of this package manager is that users can specifiy an exact version,
 //! or if they want the newest major/minor/patch release.
@@ -15,11 +14,12 @@
 //! * Newest Minor: `WorldEdit: 6.*` / `WorldEdit@6.*`
 //! * Newest Major (Newest release): `WorldEdit: *` / `WorldEdit`
 
-use std::{fmt, fs};
 use std::error::Error;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::{ErrorKind, Read, Write};
+use std::{fmt, fs};
+use std::path::Path;
 use yaml_rust::YamlLoader;
 
 const CONFIG_ROOT: &'static str = "./.dropper";
@@ -27,7 +27,7 @@ const CONFIG_PATH: &'static str = "./.dropper/config.yml";
 const PKG_LIST_PATH: &'static str = "./pkg.yml";
 
 #[derive(Debug)]
-struct YamlValidationError;
+pub struct YamlValidationError;
 
 impl Error for YamlValidationError {}
 
@@ -43,7 +43,7 @@ impl fmt::Display for YamlValidationError {
 /// * `OperationNothingToDo` - No action was performed because there was nothing to do
 /// * `OperationMalformed` - The package specifier was not parsable
 /// * `OperationNotFound` - The requested package was not found online
-enum PackageStatus {
+pub enum PackageStatus {
     OperationSuccess,
     OperationNothingToDo,
     OperationMalformed,
@@ -51,7 +51,7 @@ enum PackageStatus {
 }
 
 /// Struct to hold the configuration information for the backend
-struct PackageBackend {
+pub struct PackageBackend {
     plugin_website: String,
 }
 
@@ -63,12 +63,20 @@ impl PackageBackend {
     ///
     /// It also dumps a blank `pkg.yml` to the server root directory if it does not exist yet.
     ///
+    /// # Warning
+    /// This command is by design destructive! It will kill the config folder, along with its files,
+    /// so it is advised to prompt the user before running this! The interface should check to see if
+    /// a non-empty `.dropper` exists before running this, prompting the user if so.
+    ///
     /// # Errors
     /// The only error this function can throw is if it detects that the config/pkg files are corrupt or
     /// malformed. The interface should handle what happens at this point (e.g. display the YML validation
     /// output, or prompt them if they wish to re-initialize)
     pub fn init() -> Result<(), Box<Error>> {
         // Create the directory for the config files
+        if Path::new(CONFIG_ROOT).exists() {
+            fs::remove_dir_all(CONFIG_ROOT)?;
+        }
         fs::create_dir(CONFIG_ROOT)?;
 
         // Dump a default config file in there
@@ -76,10 +84,12 @@ impl PackageBackend {
         // TODO: file.write_all(...)
 
         // Create a pkg.yml if one does not exist yet
-        let pkg_list = OpenOptions::new().create_new(true)
-                                         .open(PKG_LIST_PATH)?;
+        let pkg_list = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(PKG_LIST_PATH)?;
 
-       Ok(())
+        Ok(())
     }
 
     /// Ensures that the
@@ -98,11 +108,13 @@ impl PackageBackend {
     fn read_yaml_file(path: &str) -> Result<Option<Vec<yaml_rust::Yaml>>, Box<Error>> {
         let mut file = match File::open(path) {
             Ok(f) => f,
-            Err(e) => return match e.kind() {
-                // If the file couldn't be found, that's ok and we return a None
-                // Otherwise, we return the other IO error that we encountered
-                ErrorKind::NotFound => Ok(None),
-                _ => Err(Box::new(e))
+            Err(e) => {
+                return match e.kind() {
+                    // If the file couldn't be found, that's ok and we return a None
+                    // Otherwise, we return the other IO error that we encountered
+                    ErrorKind::NotFound => Ok(None),
+                    _ => Err(Box::new(e)),
+                }
             }
         };
 
@@ -113,7 +125,7 @@ impl PackageBackend {
         // or return a validation error if YamlLoader is not able to parse.
         match YamlLoader::load_from_str(&contents) {
             Ok(yaml) => Ok(Some(yaml)),
-            Err(_e) => Err(Box::new(YamlValidationError))
+            Err(_e) => Err(Box::new(YamlValidationError)),
         }
     }
 
