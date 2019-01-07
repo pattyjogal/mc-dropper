@@ -14,6 +14,8 @@
 //! * Newest Minor: `WorldEdit: 6.*` / `WorldEdit@6.*`
 //! * Newest Major (Newest release): `WorldEdit: *` / `WorldEdit`
 
+use crate::parser::VERSION_CODE_REGEX;
+use crate::text_assets;
 use regex::Regex;
 use std::error::Error;
 use std::fs::File;
@@ -21,8 +23,6 @@ use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::{fmt, fs, io};
-use crate::text_assets;
-use crate::parser::VERSION_CODE_REGEX;
 use yaml_rust::YamlLoader;
 
 const CONFIG_ROOT: &'static str = "./.dropper";
@@ -203,36 +203,40 @@ impl PackageBackend {
     /// # Non Error Return Value
     /// A tuple containing the package name and an option of version code. If none, assume the newest
     /// package is acceptable.
-    fn parse_package_specifier(pkg_specifier: String) -> Result<(String, Option<String>), ErrorKind> {
+    fn parse_package_specifier(
+        pkg_specifier: String,
+    ) -> Result<(String, Option<String>), ErrorKind> {
         let name_re = Regex::new(r"^\w+$").unwrap();
         if pkg_specifier.contains(VERSION_SPLIT_CHAR) {
             // A version was specified along with the package
-            let components = pkg_specifier.split(VERSION_SPLIT_CHAR).collect::<Vec<&str>>();
+            let components = pkg_specifier
+                .split(VERSION_SPLIT_CHAR)
+                .collect::<Vec<&str>>();
             // Anything more than two components means that one too many separators appeared
             match components.len() {
                 2 => {
                     let version_re = Regex::new(VERSION_CODE_REGEX).unwrap();
 
                     if !name_re.is_match(&components[0]) {
-                        return Err(ErrorKind::PkgSpecInvalid(pkg_specifier))
+                        return Err(ErrorKind::PkgSpecInvalid(pkg_specifier));
                     }
 
                     if !version_re.is_match(&components[1]) {
-                        return Err(ErrorKind::PkgSpecInvalid(pkg_specifier))
+                        return Err(ErrorKind::PkgSpecInvalid(pkg_specifier));
                     }
 
                     // At this point, the components are valid and can be passed out
                     Ok((components[0].to_string(), Some(components[1].to_string())))
-                },
+                }
                 // More than two components were found
-                _ => Err(ErrorKind::PkgSpecInvalid(pkg_specifier))
+                _ => Err(ErrorKind::PkgSpecInvalid(pkg_specifier)),
             }
         } else {
             // No version was specified along with the package
             // Ensure that the package name is just one valid word
             match name_re.is_match(&pkg_specifier) {
                 true => Ok((pkg_specifier, None)),
-                false => Err(ErrorKind::PkgSpecInvalid(pkg_specifier))
+                false => Err(ErrorKind::PkgSpecInvalid(pkg_specifier)),
             }
         }
     }

@@ -190,7 +190,7 @@ impl PluginFetchable for BukkitHTMLPluginParser {
             for groups in re.captures_iter(&name) {
                 if &groups[0] == version_code {
                     println!("Found version number {}!", version_code);
-                    return Some(link)
+                    return Some(link);
                 }
             }
         }

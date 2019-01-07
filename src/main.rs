@@ -1,21 +1,23 @@
 //! Dropper - A Minecraft Package Manager
-pub mod parser;
 pub mod backend;
+pub mod parser;
 pub mod text_assets;
 
-use crate::parser::PluginSearchable;
-use crate::parser::PluginFetchable;
 use crate::backend::PackageBackend;
+use crate::parser::PluginFetchable;
+use crate::parser::PluginSearchable;
 
 fn main() {
     println!("Hello, world!");
-    let x = parser::BukkitHTMLPluginParser::new("https://dev.bukkit.org/search?search={}",
-                                                ".listing",
-                                                "div.results-name > a");
+    let x = parser::BukkitHTMLPluginParser::new(
+        "https://dev.bukkit.org/search?search={}",
+        ".listing",
+        "div.results-name > a",
+    );
 
     match x.fetch("worldedit", "6.1.9") {
         Some(url) => println!("Install your package at: {}", url),
-        None      => println!("I'm sorry! We couldn't find that version")
+        None => println!("I'm sorry! We couldn't find that version"),
     };
 
     match PackageBackend::init() {
