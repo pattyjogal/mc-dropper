@@ -9,7 +9,10 @@ use std::collections::HashMap;
 
 const BUKKIT_PKG_FORMAT_URL: &'static str = "https://dev.bukkit.org/projects/{}/files";
 
-pub const VERSION_CODE_REGEX: &'static str = r"(\d+\.)?(\d+\.)?(\*|\d+)";
+// A version code regular expression that allows for wildcards, and the occasional
+// fourth version sub-code. (Most plugins should follow up to three, but some like WorldEdit
+// don't do this for some reason)
+pub const VERSION_CODE_REGEX: &'static str = r"(\d+)\.?(\*|\d+)\.?(\*|\d+)\.?(\*|\d+)?";
 
 pub struct BukkitHTMLPluginParser {
     search_url: &'static str,
@@ -55,6 +58,11 @@ pub trait PluginFetchable {
     ///
     /// *Note*: `package_name` has to be specifically formatted for the website being used. This name will be slipped into a URL to download the package in this function.
     fn fetch(&self, package_name: &str, version_code: &str) -> Option<String>;
+
+    /// Provides a way to list all the versions of the package in question. Can return a HashMap
+    /// of version names to links, or if no package was found, returns `None`.
+    /// *Note*: `package_name` has to be specifically formatted for the website being used. This name will be slipped into a URL to download the package in this function.
+    fn enumerate_versions(&self, package_name: &str) -> Option<(HashMap<String, String>)>;
 }
 
 pub trait HTMLPluginScrapable {
@@ -141,7 +149,7 @@ impl PluginSearchable for BukkitHTMLPluginParser {
 
 /// Add plugin fetching capabilities
 impl PluginFetchable for BukkitHTMLPluginParser {
-    fn fetch(&self, package_name: &str, version_code: &str) -> Option<String> {
+    fn enumerate_versions(&self, package_name: &str) -> Option<(HashMap<String, String>)> {
         // Construct a URL that allows us to walk the files table
         let built_url = str::replace(BUKKIT_PKG_FORMAT_URL, "{}", package_name);
 
@@ -174,8 +182,15 @@ impl PluginFetchable for BukkitHTMLPluginParser {
         // Set up a mapping between the two above vectors
         let mut names_to_links = HashMap::new();
         for (name, link) in plugin_version_names.iter().zip(plugin_version_links) {
-            names_to_links.insert(name, link);
+            names_to_links.insert(name.to_string(), link);
         }
+
+        Some(names_to_links)
+    }
+
+    fn fetch(&self, package_name: &str, version_code: &str) -> Option<String> {
+        // Enumerate all the possible versions for the package
+        let names_to_links = self.enumerate_versions(package_name)?;
 
         // Set up a regular expression that catches version numbers
         // From https://stackoverflow.com/questions/82064/a-regex-for-version-number-parsing
@@ -188,6 +203,7 @@ impl PluginFetchable for BukkitHTMLPluginParser {
         // highest hit rate.
         for (name, link) in names_to_links {
             for groups in re.captures_iter(&name) {
+                println!("{}", &groups[0]);
                 if &groups[0] == version_code {
                     println!("Found version number {}!", version_code);
                     return Some(link);
@@ -195,6 +211,7 @@ impl PluginFetchable for BukkitHTMLPluginParser {
             }
         }
 
+        // The version wasn't found, so we return None
         None
     }
 }

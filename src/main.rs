@@ -15,6 +15,10 @@ fn main() {
         "div.results-name > a",
     );
 
+    for (ver, link) in x.enumerate_versions("worldedit").unwrap() {
+        println!("{}->{}", ver, link);
+    }
+
     match x.fetch("worldedit", "6.1.9") {
         Some(url) => println!("Install your package at: {}", url),
         None => println!("I'm sorry! We couldn't find that version"),
