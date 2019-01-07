@@ -6,6 +6,7 @@ extern crate yaml_rust;
 
 pub mod parser;
 pub mod backend;
+pub mod text_assets;
 
 use parser::PluginSearchable;
 use parser::PluginFetchable;

@@ -21,6 +21,7 @@ use std::io::{Read, Write};
 use std::{fmt, fs, io};
 use std::path::Path;
 use yaml_rust::YamlLoader;
+use text_assets;
 
 const CONFIG_ROOT: &'static str = "./.dropper";
 const CONFIG_PATH: &'static str = "./.dropper/config.yml";
@@ -76,7 +77,7 @@ impl PackageBackend {
 
         // Dump a default config file in there
         let mut config = File::create(CONFIG_PATH)?;
-        // TODO: file.write_all(...)
+        config.write_all(text_assets::CONFIG_YAML_DEFAULT);
 
         // Create a pkg.yml if one does not exist yet
         let pkg_list = OpenOptions::new()
