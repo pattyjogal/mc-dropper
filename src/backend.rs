@@ -144,7 +144,7 @@ impl PackageBackend {
     /// # Errors
     /// If the package specifier was invalid, or valid but not found, the Result returned will contain
     /// an error, and it will need to be handled in whatever frontend is being used.
-    fn pkg_add(&self, pkg_specifier: &str) -> Result<bool, Box<Error>> {
+    pub fn pkg_add(&self, pkg_specifier: &str) -> Result<bool, Box<Error>> {
         unimplemented!();
     }
 
@@ -158,7 +158,7 @@ impl PackageBackend {
     ///
     /// # Errors
     /// *
-    fn pkg_install(&self, pkg_specifier: &str) -> Result<bool, Box<Error>> {
+    pub fn pkg_install(&self, pkg_specifier: &str) -> Result<bool, Box<Error>> {
         unimplemented!();
     }
 
@@ -175,7 +175,7 @@ impl PackageBackend {
     /// used.
     ///
     /// Additionally, this function can return a `OperationNothingToDo` if the package is already  up to date.
-    fn pkg_update(&self, pkg_specifier: &str) -> Result<bool, Box<Error>> {
+    pub fn pkg_update(&self, pkg_specifier: &str) -> Result<bool, Box<Error>> {
         unimplemented!();
     }
 }
