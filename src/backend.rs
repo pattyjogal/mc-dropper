@@ -14,32 +14,44 @@
 //! * Newest Minor: `WorldEdit: 6.*` / `WorldEdit@6.*`
 //! * Newest Major (Newest release): `WorldEdit: *` / `WorldEdit`
 
+use regex::Regex;
 use std::error::Error;
 use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::{Read, Write};
-use std::{fmt, fs, io};
 use std::path::Path;
-use yaml_rust::YamlLoader;
+use std::{fmt, fs, io};
 use text_assets;
+use parser::VERSION_CODE_REGEX;
+use yaml_rust::YamlLoader;
 
 const CONFIG_ROOT: &'static str = "./.dropper";
 const CONFIG_PATH: &'static str = "./.dropper/config.yml";
 const PKG_LIST_PATH: &'static str = "./pkg.yml";
 
+const VERSION_SPLIT_CHAR: char = '@';
+
 #[derive(Debug)]
 pub enum ErrorKind {
     // Something when wrong while trying to parse the YAML file. Expects the filename as a param.
     YamlInvalid(String),
+    // The supplied package specifier doesn't match any of the possible formats. Expects the bad
+    // package specifier as a param.
+    PkgSpecInvalid(String),
 }
 
 impl Error for ErrorKind {}
 
 impl fmt::Display for ErrorKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", match self {
-            ErrorKind::YamlInvalid(s) => format!("invalid YAML syntax on file {}", s)
-        })
+        write!(
+            f,
+            "{}",
+            match self {
+                ErrorKind::YamlInvalid(s) => format!("invalid YAML syntax on file {}", s),
+                ErrorKind::PkgSpecInvalid(s) => format!("'{}' is not a valid package specifier", s),
+            }
+        )
     }
 }
 
@@ -118,7 +130,7 @@ impl PackageBackend {
                     // Otherwise, we return the other IO error that we encountered
                     io::ErrorKind::NotFound => Ok(None),
                     _ => Err(Box::new(e)),
-                }
+                };
             }
         };
 
@@ -177,5 +189,51 @@ impl PackageBackend {
     /// Additionally, this function can return a `OperationNothingToDo` if the package is already  up to date.
     pub fn pkg_update(&self, pkg_specifier: &str) -> Result<bool, Box<Error>> {
         unimplemented!();
+    }
+
+    /// An internal function to parse out the package name and version from a package specifier
+    ///
+    /// # Arguments
+    /// * `pkg_specifier` - A string slice that represents the package and version the user wishes
+    ///                     to add. It should be in the package specifier format defined above.
+    ///
+    /// # Errors
+    /// * [`ErrorKind::PkgSpecInvalid`](enum.ErrorKind.html#variant.PkgSpecInvalid) - the package specifier was invalid
+    ///
+    /// # Non Error Return Value
+    /// A tuple containing the package name and an option of version code. If none, assume the newest
+    /// package is acceptable.
+    fn parse_package_specifier(pkg_specifier: String) -> Result<(String, Option<String>), ErrorKind> {
+        let name_re = Regex::new(r"^\w+$").unwrap();
+        if pkg_specifier.contains(VERSION_SPLIT_CHAR) {
+            // A version was specified along with the package
+            let components = pkg_specifier.split(VERSION_SPLIT_CHAR).collect::<Vec<&str>>();
+            // Anything more than two components means that one too many separators appeared
+            match components.len() {
+                2 => {
+                    let version_re = Regex::new(VERSION_CODE_REGEX).unwrap();
+
+                    if !name_re.is_match(&components[0]) {
+                        return Err(ErrorKind::PkgSpecInvalid(pkg_specifier))
+                    }
+
+                    if !version_re.is_match(&components[1]) {
+                        return Err(ErrorKind::PkgSpecInvalid(pkg_specifier))
+                    }
+
+                    // At this point, the components are valid and can be passed out
+                    Ok((components[0].to_string(), Some(components[1].to_string())))
+                },
+                // More than two components were found
+                _ => Err(ErrorKind::PkgSpecInvalid(pkg_specifier))
+            }
+        } else {
+            // No version was specified along with the package
+            // Ensure that the package name is just one valid word
+            match name_re.is_match(&pkg_specifier) {
+                true => Ok((pkg_specifier, None)),
+                false => Err(ErrorKind::PkgSpecInvalid(pkg_specifier))
+            }
+        }
     }
 }

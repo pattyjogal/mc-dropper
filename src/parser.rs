@@ -9,6 +9,8 @@ use std::collections::HashMap;
 
 const BUKKIT_PKG_FORMAT_URL: &'static str = "https://dev.bukkit.org/projects/{}/files";
 
+pub const VERSION_CODE_REGEX: &'static str = r"(\d+\.)?(\d+\.)?(\*|\d+)";
+
 pub struct BukkitHTMLPluginParser {
     search_url: &'static str,
     list_selector: &'static str,
@@ -177,7 +179,7 @@ impl PluginFetchable for BukkitHTMLPluginParser {
 
         // Set up a regular expression that catches version numbers
         // From https://stackoverflow.com/questions/82064/a-regex-for-version-number-parsing
-        let re = Regex::new(r"(\d+\.)?(\d+\.)?(\*|\d+)").unwrap();
+        let re = Regex::new(VERSION_CODE_REGEX).unwrap();
 
         // The outer loop goes down each version-to-link pair, and the inner loop
         // looks through all of the version numbers found in the version name to see
