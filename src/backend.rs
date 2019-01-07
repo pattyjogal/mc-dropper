@@ -21,8 +21,8 @@ use std::fs::OpenOptions;
 use std::io::{Read, Write};
 use std::path::Path;
 use std::{fmt, fs, io};
-use text_assets;
-use parser::VERSION_CODE_REGEX;
+use crate::text_assets;
+use crate::parser::VERSION_CODE_REGEX;
 use yaml_rust::YamlLoader;
 
 const CONFIG_ROOT: &'static str = "./.dropper";

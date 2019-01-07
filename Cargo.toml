@@ -2,6 +2,7 @@
 name = "dropper"
 version = "0.1.0"
 authors = ["Dropper Dev Team <dropper@pattyjog.al>"]
+edition = "2018"
 
 [dependencies]
 scraper = "0.9.0"

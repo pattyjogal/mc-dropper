@@ -1,16 +1,11 @@
 //! Dropper - A Minecraft Package Manager
-extern crate reqwest;
-extern crate scraper;
-extern crate regex;
-extern crate yaml_rust;
-
 pub mod parser;
 pub mod backend;
 pub mod text_assets;
 
-use parser::PluginSearchable;
-use parser::PluginFetchable;
-use backend::PackageBackend;
+use crate::parser::PluginSearchable;
+use crate::parser::PluginFetchable;
+use crate::backend::PackageBackend;
 
 fn main() {
     println!("Hello, world!");
