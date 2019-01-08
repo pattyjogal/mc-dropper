@@ -15,6 +15,7 @@
 //! * Newest Major (Newest release): `WorldEdit: *` / `WorldEdit`
 
 use crate::parser::VERSION_CODE_REGEX;
+use crate::parser::{PluginSearchable, PluginFetchable};
 use crate::text_assets;
 use regex::Regex;
 use std::error::Error;
@@ -28,6 +29,7 @@ use yaml_rust::YamlLoader;
 const CONFIG_ROOT: &'static str = "./.dropper";
 const CONFIG_PATH: &'static str = "./.dropper/config.yml";
 const PKG_LIST_PATH: &'static str = "./pkg.yml";
+const DOWNLOAD_DIR: &'static str = "./plugins";
 
 const VERSION_SPLIT_CHAR: char = '@';
 
@@ -56,11 +58,12 @@ impl fmt::Display for ErrorKind {
 }
 
 /// Struct to hold the configuration information for the backend
-pub struct PackageBackend {
+pub struct PackageBackend<'a> {
     plugin_website: String,
+    package_parser: &'a PluginFetchable,
 }
 
-impl PackageBackend {
+impl<'a> PackageBackend<'a> {
     /// The initalization function for the backend. This is performed only on the first run, or if the .dropper folder is ever deleted
     ///
     /// This creates a folder at the server root caled .dropper, and in it, places a default config file
@@ -157,7 +160,20 @@ impl PackageBackend {
     /// If the package specifier was invalid, or valid but not found, the Result returned will contain
     /// an error, and it will need to be handled in whatever frontend is being used.
     pub fn pkg_add(&self, pkg_specifier: &str) -> Result<bool, Box<Error>> {
-        unimplemented!();
+        // Parse the package specifier
+        let pkg_url = match Self::parse_package_specifier(pkg_specifier.to_string())? {
+            // A version was specified: fetch that specific version
+            (name, Some(version)) => {
+                match self.package_parser.fetch(&name, &version) {
+                    Some(link) => link,
+                    None => return Ok(false),
+                }
+            },
+            // No version was specified: get the newest version
+            (name, None) => "".to_string()
+        };
+
+
     }
 
     /// The installer function which takes in a package specifier and installs that package to the user's
