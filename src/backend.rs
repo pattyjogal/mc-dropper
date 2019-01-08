@@ -159,19 +159,23 @@ impl<'a> PackageBackend<'a> {
     /// # Errors
     /// If the package specifier was invalid, or valid but not found, the Result returned will contain
     /// an error, and it will need to be handled in whatever frontend is being used.
-    pub fn pkg_add(&self, pkg_specifier: &str) -> Result<bool, Box<Error>> {
+    pub fn pkg_add(&self, pkg_specifier: &str) -> Result<Option<(String, String)>, Box<Error>> {
         // Parse the package specifier
         let (pkg_url, name, version) = match Self::parse_package_specifier(pkg_specifier.to_string())? {
             // A version was specified: fetch that specific version
             (name, Some(version)) => {
                 match self.package_parser.fetch(&name, &version) {
                     Some(link) => (link, name, version),
-                    None => return Ok(false),
+                    None => return Ok(None)
                 }
             },
             // No version was specified: get the newest version
-            // TODO: This will come with version
-            (name, None) => ("".to_string(), name, "0.0.0".to_string())
+            (name, None) => {
+                match self.package_parser.find_newest_version(&name) {
+                    Some((name, link)) => (link, name, "0.0.0".to_string()),
+                    None => return Ok(None)
+                }
+            }
         };
 
         let mut response = reqwest::get(&pkg_url)?;
@@ -181,7 +185,7 @@ impl<'a> PackageBackend<'a> {
             File::create(filename)?
         };
         copy(&mut response, &mut plugin_file);
-        Ok(true)
+        Ok(Some((name, version)))
     }
 
     /// The installer function which takes in a package specifier and installs that package to the user's

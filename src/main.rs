@@ -42,10 +42,10 @@ fn main() {
         package_parser: &x
     };
 
-    match pb.pkg_add("worldedit@6.1.9") {
+    match pb.pkg_add("worldedit") {
         Ok(b) => match b {
-            true => println!("Package installed!"),
-            false => println!("Did not install package"),
+            Some((name, version)) => println!("Package {} installed @ version {}!", name, version),
+            None => println!("Did not install package"),
         },
         Err(e) => println!("Error while trying to add package: {}", e)
     }
