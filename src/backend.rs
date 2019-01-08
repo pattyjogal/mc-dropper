@@ -21,7 +21,7 @@ use regex::Regex;
 use std::error::Error;
 use std::fs::File;
 use std::fs::OpenOptions;
-use std::io::{Read, Write};
+use std::io::{Read, Write, copy};
 use std::path::Path;
 use std::{fmt, fs, io};
 use yaml_rust::YamlLoader;
@@ -59,8 +59,8 @@ impl fmt::Display for ErrorKind {
 
 /// Struct to hold the configuration information for the backend
 pub struct PackageBackend<'a> {
-    plugin_website: String,
-    package_parser: &'a PluginFetchable,
+    pub plugin_website: String,
+    pub package_parser: &'a PluginFetchable,
 }
 
 impl<'a> PackageBackend<'a> {
@@ -161,19 +161,27 @@ impl<'a> PackageBackend<'a> {
     /// an error, and it will need to be handled in whatever frontend is being used.
     pub fn pkg_add(&self, pkg_specifier: &str) -> Result<bool, Box<Error>> {
         // Parse the package specifier
-        let pkg_url = match Self::parse_package_specifier(pkg_specifier.to_string())? {
+        let (pkg_url, name, version) = match Self::parse_package_specifier(pkg_specifier.to_string())? {
             // A version was specified: fetch that specific version
             (name, Some(version)) => {
                 match self.package_parser.fetch(&name, &version) {
-                    Some(link) => link,
+                    Some(link) => (link, name, version),
                     None => return Ok(false),
                 }
             },
             // No version was specified: get the newest version
-            (name, None) => "".to_string()
+            // TODO: This will come with version
+            (name, None) => ("".to_string(), name, "0.0.0".to_string())
         };
 
+        let mut response = reqwest::get(&pkg_url)?;
 
+        let mut plugin_file = {
+            let filename = format!("{}/{}@{}.jar", DOWNLOAD_DIR, name, version);
+            File::create(filename)?
+        };
+        copy(&mut response, &mut plugin_file);
+        Ok(true)
     }
 
     /// The installer function which takes in a package specifier and installs that package to the user's

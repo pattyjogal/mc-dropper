@@ -35,4 +35,17 @@ fn main() {
         Ok(_) => println!("All YAML looks valid to me!"),
         Err(e) => println!("Error encountered: {}", e),
     }
+
+    let pb = PackageBackend {
+        plugin_website: "".to_string(),
+        package_parser: &x
+    };
+
+    match pb.pkg_add("worldedit@6.1.9") {
+        Ok(b) => match b {
+            true => println!("Package installed!"),
+            false => println!("Did not install package"),
+        },
+        Err(e) => println!("Error while trying to add package: {}", e)
+    }
 }
