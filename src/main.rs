@@ -15,7 +15,8 @@ fn main() {
         "div.results-name > a",
     );
 
-    for (ver, link) in x.enumerate_versions("worldedit").unwrap() {
+    let (names, links) = x.enumerate_versions("worldedit").unwrap();
+    for (ver, link) in names.iter().zip(links) {
         println!("{}->{}", ver, link);
     }
 
