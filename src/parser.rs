@@ -182,7 +182,7 @@ impl PluginFetchable for BukkitHTMLPluginParser {
         // Set up a mapping between the two above vectors
         let mut names_to_links = HashMap::new();
         for (name, link) in plugin_version_names.iter().zip(plugin_version_links) {
-            names_to_links.insert(name.to_string(), link);
+            names_to_links.insert(name.to_string(), format!("https://dev.bukkit.org{}", link));
         }
 
         Some(names_to_links)
