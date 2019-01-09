@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
-const BUKKIT_PKG_FORMAT_URL: &'static str = "https://dev.bukkit.org/projects/{}/files";
+const BUKKIT_PKG_FORMAT_URL: &'static str = "https://dev.bukkit.org/projects/{}/files?filter-game-version=<>";
 
 // A version code regular expression that allows for wildcards, and the occasional
 // fourth version sub-code. (Most plugins should follow up to three, but some like WorldEdit
@@ -197,6 +197,7 @@ impl PluginFetchable for BukkitHTMLPluginParser {
     ) -> Result<Option<(Vec<String>, Vec<String>)>, Box<Error>> {
         // Construct a URL that allows us to walk the files table
         let built_url = str::replace(BUKKIT_PKG_FORMAT_URL, "{}", package_name);
+        let built_url = str::replace(&built_url, "<>", &self.bukkit_mc_version_code()?);
 
         // Get the website content first
         let mut response = reqwest::get(&built_url)?;

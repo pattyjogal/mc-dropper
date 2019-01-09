@@ -16,7 +16,7 @@ fn main() {
         "1.12".to_string(),
     );
 
-    match x.enumerate_versions("luckperms") {
+    match x.enumerate_versions("worldedit") {
         Ok(Some((names, links))) => {
             for (ver, link) in names.iter().zip(links) {
                 println!("{}->{}", ver, link);
@@ -45,7 +45,7 @@ fn main() {
         Err(e) => panic!("I ran into an error: {}", e),
     };
 
-    match pb.pkg_add("luckperms") {
+    match pb.pkg_add("worldedit") {
         Ok(b) => match b {
             Some((name, version)) => println!("Package {} installed @ version {}!", name, version),
             None => println!("Did not install package"),
