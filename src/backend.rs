@@ -15,13 +15,13 @@
 //! * Newest Major (Newest release): `WorldEdit: *` / `WorldEdit`
 
 use crate::parser::VERSION_CODE_REGEX;
-use crate::parser::{PluginSearchable, PluginFetchable};
+use crate::parser::{PluginFetchable, PluginSearchable};
 use crate::text_assets;
 use regex::Regex;
 use std::error::Error;
 use std::fs::File;
 use std::fs::OpenOptions;
-use std::io::{Read, Write, copy};
+use std::io::{copy, Read, Write};
 use std::path::Path;
 use std::{fmt, fs, io};
 use yaml_rust::YamlLoader;
@@ -88,11 +88,16 @@ impl<'a> PackageBackend<'a> {
         // its existance.
         let config_yml = PackageBackend::read_yaml_file(CONFIG_PATH)?.unwrap();
 
-
         Ok(PackageBackend {
-            plugin_website: config_yml[0]["plugin_website"].clone().into_string().unwrap(),
+            plugin_website: config_yml[0]["plugin_website"]
+                .clone()
+                .into_string()
+                .unwrap(),
             package_parser: package_parser,
-            server_version: config_yml[0]["server_version"].clone().into_string().unwrap(),
+            server_version: config_yml[0]["server_version"]
+                .clone()
+                .into_string()
+                .unwrap(),
         })
     }
 
@@ -143,20 +148,28 @@ impl<'a> PackageBackend<'a> {
     pub fn validate() -> Result<(), Box<Error>> {
         let config = match PackageBackend::read_yaml_file(CONFIG_PATH)? {
             Some(c) => c,
-            None => return Err(Box::new(ErrorKind::ConfigMissing))
+            None => return Err(Box::new(ErrorKind::ConfigMissing)),
         };
         // Read all of the fields we need, and ensure they can be parsed into the
         // right type.
         let config_doc = &config[0];
 
         match config_doc["server_version"].clone().into_string() {
-            Some(_) => {},
-            None => return Err(Box::new(ErrorKind::ConfigInvalid("server_version".to_string())))
+            Some(_) => {}
+            None => {
+                return Err(Box::new(ErrorKind::ConfigInvalid(
+                    "server_version".to_string(),
+                )))
+            }
         }
 
         match config_doc["plugin_website"].clone().into_string() {
-            Some(_) => {},
-            None => return Err(Box::new(ErrorKind::ConfigInvalid("plugin_website".to_string())))
+            Some(_) => {}
+            None => {
+                return Err(Box::new(ErrorKind::ConfigInvalid(
+                    "plugin_website".to_string(),
+                )))
+            }
         }
 
         // No need to valdate Some/None for pkg: it doesn't _need_ to exist for all
@@ -212,22 +225,19 @@ impl<'a> PackageBackend<'a> {
     /// an error, and it will need to be handled in whatever frontend is being used.
     pub fn pkg_add(&self, pkg_specifier: &str) -> Result<Option<(String, String)>, Box<Error>> {
         // Parse the package specifier
-        let (pkg_url, name, version) = match Self::parse_package_specifier(pkg_specifier.to_string())? {
-            // A version was specified: fetch that specific version
-            (name, Some(version)) => {
-                match self.package_parser.fetch(&name, &version)? {
+        let (pkg_url, name, version) =
+            match Self::parse_package_specifier(pkg_specifier.to_string())? {
+                // A version was specified: fetch that specific version
+                (name, Some(version)) => match self.package_parser.fetch(&name, &version)? {
                     Some(link) => (link, name, version),
-                    None => return Ok(None)
-                }
-            },
-            // No version was specified: get the newest version
-            (name, None) => {
-                match self.package_parser.find_newest_version(&name)? {
+                    None => return Ok(None),
+                },
+                // No version was specified: get the newest version
+                (name, None) => match self.package_parser.find_newest_version(&name)? {
                     Some((name, link)) => (link, name, "0.0.0".to_string()),
-                    None => return Ok(None)
-                }
-            }
-        };
+                    None => return Ok(None),
+                },
+            };
 
         let mut response = reqwest::get(&pkg_url)?;
 

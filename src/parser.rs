@@ -2,14 +2,14 @@
 //!
 //! Plugin parsers have two modi operandi: either users can search for install terms, like "World", and come back with a list of plugins to install, or they can specify a specific version, like `WorldEdit: "6.1.9"`.
 
-use std::fmt;
-use std::boxed::Box;
-use reqwest::{StatusCode};
 use regex::Regex;
+use reqwest::StatusCode;
 use scraper::element_ref::ElementRef;
 use scraper::{Html, Selector};
+use std::boxed::Box;
 use std::collections::HashMap;
 use std::error::Error;
+use std::fmt;
 
 const BUKKIT_PKG_FORMAT_URL: &'static str = "https://dev.bukkit.org/projects/{}/files";
 
@@ -17,7 +17,6 @@ const BUKKIT_PKG_FORMAT_URL: &'static str = "https://dev.bukkit.org/projects/{}/
 // fourth version sub-code. (Most plugins should follow up to three, but some like WorldEdit
 // don't do this for some reason)
 pub const VERSION_CODE_REGEX: &'static str = r"(\d+)\.?(\*|\d+)\.?(\*|\d+)\.?(\*|\d+)?";
-
 
 #[derive(Debug)]
 pub enum ErrorKind {
@@ -38,7 +37,9 @@ impl fmt::Display for ErrorKind {
             "{}",
             match self {
                 ErrorKind::RequestFailed(s) => format!("request failed with code {}", s),
-                ErrorKind::ServerVersionNotFound(s) => format!("a plugin for server version {} not found", s),
+                ErrorKind::ServerVersionNotFound(s) => {
+                    format!("a plugin for server version {} not found", s)
+                }
             }
         )
     }
@@ -90,12 +91,18 @@ pub trait PluginFetchable {
     /// *Note*: `package_name` has to be specifically formatted for the website being used. This name will be slipped into a URL to download the package in this function.
     fn fetch(&self, package_name: &str, version_code: &str) -> Result<Option<String>, Box<Error>>;
 
-    fn find_newest_version(&self, package_name: &str) -> Result<Option<(String, String)>, Box<Error>>;
+    fn find_newest_version(
+        &self,
+        package_name: &str,
+    ) -> Result<Option<(String, String)>, Box<Error>>;
 
     /// Provides a way to list all the versions of the package in question. Can return two Vecs
     /// of version names and links (1 : 1 in order), or if no package was found, returns `None`.
     /// *Note*: `package_name` has to be specifically formatted for the website being used. This name will be slipped into a URL to download the package in this function.
-    fn enumerate_versions(&self, package_name: &str) -> Result<Option<(Vec<String>, Vec<String>)>, Box<Error>>;
+    fn enumerate_versions(
+        &self,
+        package_name: &str,
+    ) -> Result<Option<(Vec<String>, Vec<String>)>, Box<Error>>;
 }
 
 pub trait HTMLPluginScrapable {
@@ -145,7 +152,7 @@ impl BukkitHTMLPluginParser {
         search_url: &'static str,
         list_selector: &'static str,
         item_selector: &'static str,
-        minecraft_version: String
+        minecraft_version: String,
     ) -> Self {
         BukkitHTMLPluginParser {
             search_url: search_url,
@@ -184,7 +191,10 @@ impl PluginSearchable for BukkitHTMLPluginParser {
 
 /// Add plugin fetching capabilities
 impl PluginFetchable for BukkitHTMLPluginParser {
-    fn enumerate_versions(&self, package_name: &str) -> Result<Option<(Vec<String>, Vec<String>)>, Box<Error>> {
+    fn enumerate_versions(
+        &self,
+        package_name: &str,
+    ) -> Result<Option<(Vec<String>, Vec<String>)>, Box<Error>> {
         // Construct a URL that allows us to walk the files table
         let built_url = str::replace(BUKKIT_PKG_FORMAT_URL, "{}", package_name);
 
@@ -196,8 +206,8 @@ impl PluginFetchable for BukkitHTMLPluginParser {
             StatusCode::NOT_FOUND => return Ok(None),
             status => match status.is_success() {
                 true => response.text()?.to_string(),
-                false => return Err(Box::new(ErrorKind::RequestFailed(status)))
-            }
+                false => return Err(Box::new(ErrorKind::RequestFailed(status))),
+            },
         };
 
         println!("Built URL: {}", built_url);
@@ -225,25 +235,30 @@ impl PluginFetchable for BukkitHTMLPluginParser {
         Ok(Some((plugin_version_names, plugin_version_links)))
     }
 
-
-    fn find_newest_version(&self, package_name: &str) -> Result<Option<(String, String)>, Box<Error>> {
+    fn find_newest_version(
+        &self,
+        package_name: &str,
+    ) -> Result<Option<(String, String)>, Box<Error>> {
         // Get the version numbers
         let (names, links) = match self.enumerate_versions(package_name)? {
             Some(tup) => tup,
-            None => return Ok(None)
+            None => return Ok(None),
         };
 
         // Return a tuple of the first of each list
-        Ok(Some((names.first().cloned().unwrap(),
-                links.first().cloned().unwrap())))
+        Ok(Some((
+            names.first().cloned().unwrap(),
+            links.first().cloned().unwrap(),
+        )))
     }
 
     fn fetch(&self, package_name: &str, version_code: &str) -> Result<Option<String>, Box<Error>> {
         // Get the version numbers
-        let (plugin_version_names, plugin_version_links) = match self.enumerate_versions(package_name)? {
-            Some(tup) => tup,
-            None => return Ok(None)
-        };
+        let (plugin_version_names, plugin_version_links) =
+            match self.enumerate_versions(package_name)? {
+                Some(tup) => tup,
+                None => return Ok(None),
+            };
 
         // Set up a mapping between the two above vectors
         let mut names_to_links: HashMap<String, String> = HashMap::new();
@@ -299,7 +314,12 @@ impl BukkitHTMLPluginParser {
             "CB 1.7.9-R0.1" => "2020709689:473",
             "CB 1.7.2-R0.3" => "2020709689:403",
             "1.7.4" => "2020709689:6391",
-            _ => return Err(ErrorKind::ServerVersionNotFound(self.minecraft_version.clone()))
-        }.to_string())
+            _ => {
+                return Err(ErrorKind::ServerVersionNotFound(
+                    self.minecraft_version.clone(),
+                ))
+            }
+        }
+        .to_string())
     }
 }
