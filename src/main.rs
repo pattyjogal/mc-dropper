@@ -13,36 +13,40 @@ fn main() {
         "https://dev.bukkit.org/search?search={}",
         ".listing",
         "div.results-name > a",
+        "1.12".to_string(),
     );
 
-    let (names, links) = x.enumerate_versions("worldedit").unwrap();
-    for (ver, link) in names.iter().zip(links) {
-        println!("{}->{}", ver, link);
+    match x.enumerate_versions("luckperms") {
+        Ok(Some((names, links))) => {
+            for (ver, link) in names.iter().zip(links) {
+                println!("{}->{}", ver, link);
+            }
+        },
+        Ok(None) => println!("Sorry, that package was not found!"),
+        Err(e) => println!("An unexpected error occured: {}", e)
     }
 
     match x.fetch("worldedit", "6.1.9") {
-        Some(url) => println!("Install your package at: {}", url),
-        None => println!("I'm sorry! We couldn't find that version"),
+        Ok(Some(url)) => println!("Install your package at: {}", url),
+        Ok(None) => println!("I'm sorry! We couldn't find that version"),
+        Err(e) => println!("An unexpected error occured: {}", e)
     };
 
-    match PackageBackend::init() {
-        Ok(_) => println!("Success! Dropper files have been all set up!"),
-        Err(e) => println!("Could not complete setup: {}", e),
-    };
-
-    println!("Now that setup is done, let's validate the files:");
 
     match PackageBackend::validate() {
         Ok(_) => println!("All YAML looks valid to me!"),
-        Err(e) => println!("Error encountered: {}", e),
+        Err(e) => {
+            println!("Error encountered: {}", e);
+            PackageBackend::init();
+        },
     }
 
-    let pb = PackageBackend {
-        plugin_website: "".to_string(),
-        package_parser: &x
+    let pb = match PackageBackend::new(&x) {
+        Ok(pb) => pb,
+        Err(e) => panic!("I ran into an error: {}", e)
     };
 
-    match pb.pkg_add("worldedit") {
+    match pb.pkg_add("luckperms") {
         Ok(b) => match b {
             Some((name, version)) => println!("Package {} installed @ version {}!", name, version),
             None => println!("Did not install package"),

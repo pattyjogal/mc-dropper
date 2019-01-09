@@ -40,6 +40,10 @@ pub enum ErrorKind {
     // The supplied package specifier doesn't match any of the possible formats. Expects the bad
     // package specifier as a param.
     PkgSpecInvalid(String),
+    // The config file was missing key(s) that we require. Takes the missing key as an arg
+    ConfigInvalid(String),
+    // The config file itself is missing!
+    ConfigMissing,
 }
 
 impl Error for ErrorKind {}
@@ -52,6 +56,8 @@ impl fmt::Display for ErrorKind {
             match self {
                 ErrorKind::YamlInvalid(s) => format!("invalid YAML syntax on file {}", s),
                 ErrorKind::PkgSpecInvalid(s) => format!("'{}' is not a valid package specifier", s),
+                ErrorKind::ConfigInvalid(s) => format!("param '{}' missing from config", s),
+                ErrorKind::ConfigMissing => "the config file was not found!".to_string(),
             }
         )
     }
@@ -61,9 +67,35 @@ impl fmt::Display for ErrorKind {
 pub struct PackageBackend<'a> {
     pub plugin_website: String,
     pub package_parser: &'a PluginFetchable,
+    pub server_version: String,
 }
 
 impl<'a> PackageBackend<'a> {
+    /// Creates a new backend instance. This is performed on each command, or on each app startup.
+    /// Takes in a package parser to use for feeding the backend information.
+    ///
+    /// # Errors
+    /// Any of these errors means that some part of the configuration is missing, and as such,
+    /// we cannot reliable construct a backend. The frontend should handle the user's next
+    /// action, as `PackageBackend::init` is destructive, and needs confirmation.
+    /// * [`ErrorKind::YamlInvalid`](enum.ErrorKind.html#variant.YamlInvalid) - one of the YML files is invalid
+    /// * `std::io::ErrorKind::*` - an IO error occured
+    pub fn new(package_parser: &'a PluginFetchable) -> Result<PackageBackend<'a>, Box<Error>> {
+        // Check if the config environment is valid
+        PackageBackend::validate()?;
+
+        // Read the config - we can expect it to exist because validate checks for
+        // its existance.
+        let config_yml = PackageBackend::read_yaml_file(CONFIG_PATH)?.unwrap();
+
+
+        Ok(PackageBackend {
+            plugin_website: config_yml[0]["plugin_website"].clone().into_string().unwrap(),
+            package_parser: package_parser,
+            server_version: config_yml[0]["server_version"].clone().into_string().unwrap(),
+        })
+    }
+
     /// The initalization function for the backend. This is performed only on the first run, or if the .dropper folder is ever deleted
     ///
     /// This creates a folder at the server root caled .dropper, and in it, places a default config file
@@ -75,11 +107,6 @@ impl<'a> PackageBackend<'a> {
     /// This command is by design destructive! It will kill the config folder, along with its files,
     /// so it is advised to prompt the user before running this! The interface should check to see if
     /// a non-empty `.dropper` exists before running this, prompting the user if so.
-    ///
-    /// # Behavior
-    /// The only error this function can throw is if it detects that the config/pkg files are corrupt or
-    /// malformed. The interface should handle what happens at this point (e.g. display the YML validation
-    /// output, or prompt them if they wish to re-initialize)
     ///
     /// # Errors
     /// * `std::io::ErrorKind::*` - an IO error occured
@@ -105,12 +132,36 @@ impl<'a> PackageBackend<'a> {
 
     /// Ensures that the config files both exist and can be read
     ///
+    /// # Behavior
+    /// The only error this function can throw is if it detects that the config/pkg files are corrupt or
+    /// malformed. The interface should handle what happens at this point (e.g. display the YML validation
+    /// output, or prompt them if they wish to re-initialize)
+    ///
     /// # Errors
     /// * [`ErrorKind::YamlInvalid`](enum.ErrorKind.html#variant.YamlInvalid) - one of the YML files is invalid
     /// * `std::io::ErrorKind::*` - an IO error occured
     pub fn validate() -> Result<(), Box<Error>> {
-        PackageBackend::read_yaml_file(CONFIG_PATH)?;
-        PackageBackend::read_yaml_file(PKG_LIST_PATH)?;
+        let config = match PackageBackend::read_yaml_file(CONFIG_PATH)? {
+            Some(c) => c,
+            None => return Err(Box::new(ErrorKind::ConfigMissing))
+        };
+        // Read all of the fields we need, and ensure they can be parsed into the
+        // right type.
+        let config_doc = &config[0];
+
+        match config_doc["server_version"].clone().into_string() {
+            Some(_) => {},
+            None => return Err(Box::new(ErrorKind::ConfigInvalid("server_version".to_string())))
+        }
+
+        match config_doc["plugin_website"].clone().into_string() {
+            Some(_) => {},
+            None => return Err(Box::new(ErrorKind::ConfigInvalid("plugin_website".to_string())))
+        }
+
+        // No need to valdate Some/None for pkg: it doesn't _need_ to exist for all
+        // operations (like install), and it will be created for other ops (like add)
+        let pkg = PackageBackend::read_yaml_file(PKG_LIST_PATH)?;
         Ok(())
     }
 
@@ -164,14 +215,14 @@ impl<'a> PackageBackend<'a> {
         let (pkg_url, name, version) = match Self::parse_package_specifier(pkg_specifier.to_string())? {
             // A version was specified: fetch that specific version
             (name, Some(version)) => {
-                match self.package_parser.fetch(&name, &version) {
+                match self.package_parser.fetch(&name, &version)? {
                     Some(link) => (link, name, version),
                     None => return Ok(None)
                 }
             },
             // No version was specified: get the newest version
             (name, None) => {
-                match self.package_parser.find_newest_version(&name) {
+                match self.package_parser.find_newest_version(&name)? {
                     Some((name, link)) => (link, name, "0.0.0".to_string()),
                     None => return Ok(None)
                 }

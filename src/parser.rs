@@ -2,10 +2,14 @@
 //!
 //! Plugin parsers have two modi operandi: either users can search for install terms, like "World", and come back with a list of plugins to install, or they can specify a specific version, like `WorldEdit: "6.1.9"`.
 
+use std::fmt;
+use std::boxed::Box;
+use reqwest::{StatusCode};
 use regex::Regex;
 use scraper::element_ref::ElementRef;
 use scraper::{Html, Selector};
 use std::collections::HashMap;
+use std::error::Error;
 
 const BUKKIT_PKG_FORMAT_URL: &'static str = "https://dev.bukkit.org/projects/{}/files";
 
@@ -14,10 +18,37 @@ const BUKKIT_PKG_FORMAT_URL: &'static str = "https://dev.bukkit.org/projects/{}/
 // don't do this for some reason)
 pub const VERSION_CODE_REGEX: &'static str = r"(\d+)\.?(\*|\d+)\.?(\*|\d+)\.?(\*|\d+)?";
 
+
+#[derive(Debug)]
+pub enum ErrorKind {
+    // The status code was bad, and likely not by fault of user input. Website could be down,
+    // or network could be configured incorrectly. Takes the status code as a param.
+    RequestFailed(StatusCode),
+    // The server version requested was not found for the implemented plugin website. Takes the
+    // offending version code as a param.
+    ServerVersionNotFound(String),
+}
+
+impl Error for ErrorKind {}
+
+impl fmt::Display for ErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                ErrorKind::RequestFailed(s) => format!("request failed with code {}", s),
+                ErrorKind::ServerVersionNotFound(s) => format!("a plugin for server version {} not found", s),
+            }
+        )
+    }
+}
+
 pub struct BukkitHTMLPluginParser {
     search_url: &'static str,
     list_selector: &'static str,
     item_selector: &'static str,
+    minecraft_version: String,
 }
 
 fn extract_list_from_table(
@@ -57,14 +88,14 @@ pub trait PluginFetchable {
     /// Fetches a download link from a specific package name and version. Returns an optional package URL. If one is not found, the version lookup failed due to no version being present, or bad naming.
     ///
     /// *Note*: `package_name` has to be specifically formatted for the website being used. This name will be slipped into a URL to download the package in this function.
-    fn fetch(&self, package_name: &str, version_code: &str) -> Option<String>;
+    fn fetch(&self, package_name: &str, version_code: &str) -> Result<Option<String>, Box<Error>>;
 
-    fn find_newest_version(&self, package_name: &str) -> Option<(String, String)>;
+    fn find_newest_version(&self, package_name: &str) -> Result<Option<(String, String)>, Box<Error>>;
 
     /// Provides a way to list all the versions of the package in question. Can return two Vecs
     /// of version names and links (1 : 1 in order), or if no package was found, returns `None`.
     /// *Note*: `package_name` has to be specifically formatted for the website being used. This name will be slipped into a URL to download the package in this function.
-    fn enumerate_versions(&self, package_name: &str) -> Option<(Vec<String>, Vec<String>)>;
+    fn enumerate_versions(&self, package_name: &str) -> Result<Option<(Vec<String>, Vec<String>)>, Box<Error>>;
 }
 
 pub trait HTMLPluginScrapable {
@@ -114,11 +145,13 @@ impl BukkitHTMLPluginParser {
         search_url: &'static str,
         list_selector: &'static str,
         item_selector: &'static str,
+        minecraft_version: String
     ) -> Self {
         BukkitHTMLPluginParser {
             search_url: search_url,
             list_selector: list_selector,
             item_selector: item_selector,
+            minecraft_version: minecraft_version,
         }
     }
 }
@@ -151,15 +184,23 @@ impl PluginSearchable for BukkitHTMLPluginParser {
 
 /// Add plugin fetching capabilities
 impl PluginFetchable for BukkitHTMLPluginParser {
-    fn enumerate_versions(&self, package_name: &str) -> Option<(Vec<String>, Vec<String>)> {
+    fn enumerate_versions(&self, package_name: &str) -> Result<Option<(Vec<String>, Vec<String>)>, Box<Error>> {
         // Construct a URL that allows us to walk the files table
         let built_url = str::replace(BUKKIT_PKG_FORMAT_URL, "{}", package_name);
 
         // Get the website content first
-        let html = reqwest::get(&built_url)
-            .unwrap_or_else(|_e| panic!("Could not GET from {}", built_url))
-            .text()
-            .unwrap_or_else(|_e| panic!("Could not get HTML body from {}", built_url));
+        let mut response = reqwest::get(&built_url)?;
+
+        let html = match response.status() {
+            // In this case, the plugin can't be found.
+            StatusCode::NOT_FOUND => return Ok(None),
+            status => match status.is_success() {
+                true => response.text()?.to_string(),
+                false => return Err(Box::new(ErrorKind::RequestFailed(status)))
+            }
+        };
+
+        println!("Built URL: {}", built_url);
 
         // Get a list of the names of each file link
         let plugin_version_names = extract_list_from_table(
@@ -181,26 +222,33 @@ impl PluginFetchable for BukkitHTMLPluginParser {
             },
         );
 
-        Some((plugin_version_names, plugin_version_links))
+        Ok(Some((plugin_version_names, plugin_version_links)))
     }
 
 
-    fn find_newest_version(&self, package_name: &str) -> Option<(String, String)> {
+    fn find_newest_version(&self, package_name: &str) -> Result<Option<(String, String)>, Box<Error>> {
         // Get the version numbers
-        let (names, links) = self.enumerate_versions(package_name)?;
+        let (names, links) = match self.enumerate_versions(package_name)? {
+            Some(tup) => tup,
+            None => return Ok(None)
+        };
 
-        // Return the first of each list
-        Some((names.first().cloned()?, links.first().cloned()?))
+        // Return a tuple of the first of each list
+        Ok(Some((names.first().cloned().unwrap(),
+                links.first().cloned().unwrap())))
     }
 
-    fn fetch(&self, package_name: &str, version_code: &str) -> Option<String> {
+    fn fetch(&self, package_name: &str, version_code: &str) -> Result<Option<String>, Box<Error>> {
         // Get the version numbers
-        let (plugin_version_names, plugin_version_links) = self.enumerate_versions(package_name)?;
+        let (plugin_version_names, plugin_version_links) = match self.enumerate_versions(package_name)? {
+            Some(tup) => tup,
+            None => return Ok(None)
+        };
 
         // Set up a mapping between the two above vectors
-        let mut names_to_links = HashMap::new();
+        let mut names_to_links: HashMap<String, String> = HashMap::new();
         for (name, link) in plugin_version_names.iter().zip(plugin_version_links) {
-            names_to_links.insert(name.to_string(), link);
+            names_to_links.insert(name.to_string(), link.to_string());
         }
 
         // Set up a regular expression that catches version numbers
@@ -215,12 +263,43 @@ impl PluginFetchable for BukkitHTMLPluginParser {
         for (name, link) in names_to_links {
             for groups in re.captures_iter(&name) {
                 if &groups[0] == version_code {
-                    return Some(link);
+                    return Ok(Some(link));
                 }
             }
         }
 
         // The version wasn't found, so we return None
-        None
+        Ok(None)
+    }
+}
+
+impl BukkitHTMLPluginParser {
+    /// Bukkit has no defined versioning system; versions are _named_, but that doesn't
+    /// help us much, since the names can include useless, inconsistent, or conflicting info.
+    /// E.g. some plugins will list MC versions they are compatible with in the title, which
+    /// can be figured out when we know what version number we want, but it's harder to reverse
+    /// and decide what the version number actually is. So, we have to make some educated guesses
+    /// using the rest of the versions to look for patterns.
+    fn extract_version_numbers(version_list: Vec<String>) -> Vec<String> {
+        unimplemented!();
+    }
+
+    /// Bukkit has another annoyance: their filterable MC version codes are a very odd mapping.
+    /// This function abstracts that away and handles it.
+    fn bukkit_mc_version_code(&self) -> Result<String, ErrorKind> {
+        // This will feature more versions soon
+        Ok(match self.minecraft_version.as_ref() {
+            "1.12" => "2020709689:6588",
+            "1.11" => "2020709689:630",
+            "1.10" => "2020709689:591",
+            "1.9" => "2020709689:585",
+            "1.8.1" => "2020709689:532",
+            "1.8" => "2020709689:531",
+            "CB 1.7.9-R0.2" => "2020709689:490",
+            "CB 1.7.9-R0.1" => "2020709689:473",
+            "CB 1.7.2-R0.3" => "2020709689:403",
+            "1.7.4" => "2020709689:6391",
+            _ => return Err(ErrorKind::ServerVersionNotFound(self.minecraft_version.clone()))
+        }.to_string())
     }
 }
