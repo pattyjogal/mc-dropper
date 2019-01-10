@@ -11,12 +11,13 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::fmt;
 
-const BUKKIT_PKG_FORMAT_URL: &'static str = "https://dev.bukkit.org/projects/{}/files?filter-game-version=<>";
+const BUKKIT_PKG_FORMAT_URL: &'static str =
+    "https://dev.bukkit.org/projects/{}/files?filter-game-version=<>";
 
 // A version code regular expression that allows for wildcards, and the occasional
 // fourth version sub-code. (Most plugins should follow up to three, but some like WorldEdit
 // don't do this for some reason)
-pub const VERSION_CODE_REGEX: &'static str = r"(\d+)\.?(\*|\d+)\.?(\*|\d+)\.?(\*|\d+)?";
+pub const VERSION_CODE_REGEX: &'static str = r"(\d+)\.(\*|\d+)?\.?(\*|\d+)?\.?(\*|\d+)?";
 
 #[derive(Debug)]
 pub enum ErrorKind {
@@ -26,6 +27,8 @@ pub enum ErrorKind {
     // The server version requested was not found for the implemented plugin website. Takes the
     // offending version code as a param.
     ServerVersionNotFound(String),
+    // The version format is unknown and could not be parsed.
+    BadVersioningFormat,
 }
 
 impl Error for ErrorKind {}
@@ -39,6 +42,9 @@ impl fmt::Display for ErrorKind {
                 ErrorKind::RequestFailed(s) => format!("request failed with code {}", s),
                 ErrorKind::ServerVersionNotFound(s) => {
                     format!("a plugin for server version {} not found", s)
+                }
+                ErrorKind::BadVersioningFormat => {
+                    "plugin has a version format we cannot handle".to_string()
                 }
             }
         )
@@ -211,8 +217,6 @@ impl PluginFetchable for BukkitHTMLPluginParser {
             },
         };
 
-        println!("Built URL: {}", built_url);
-
         // Get a list of the names of each file link
         let plugin_version_names = extract_list_from_table(
             &html,
@@ -296,8 +300,128 @@ impl BukkitHTMLPluginParser {
     /// can be figured out when we know what version number we want, but it's harder to reverse
     /// and decide what the version number actually is. So, we have to make some educated guesses
     /// using the rest of the versions to look for patterns.
-    fn extract_version_numbers(version_list: Vec<String>) -> Vec<String> {
-        unimplemented!();
+    pub fn extract_version_numbers(version_list: Vec<String>) -> Result<Vec<String>, Box<Error>> {
+        // One way of solving this problem is to go down the list of versions,
+        // and attempt to find a strain that seems to decrement normally.
+        // Admittedly, this won't fare well with version numbers that are super
+        // close to the MC package versions, but that's a limitation that will
+        // be considered later
+
+        // Stores lists of version tuples that it finds
+        // e.g. [(6, 1, 9, None), (1, 12, None, None)]
+        let mut version_tuples: Vec<Vec<(u32, u32, Option<u32>, Option<u32>)>> = Vec::new();
+
+        let re = Regex::new(VERSION_CODE_REGEX).unwrap();
+
+        for version in version_list {
+            // Count the matched groups (should be between 3 and 5
+            // The first group is the whole match, and each subsequent is a version num
+            let mut entry_versions = Vec::new();
+            for groups in re.captures_iter(&version) {
+                match (groups.get(1), groups.get(2)) {
+                    // Push the appropriate tuple to this entry's version list
+                    (Some(a), Some(b)) => entry_versions.push((
+                        a.as_str().parse::<u32>()?,
+                        b.as_str().parse::<u32>()?,
+                        match groups.get(3) {
+                            Some(s) => Some(s.as_str().parse::<u32>()?),
+                            None => None,
+                        },
+                        match groups.get(4) {
+                            Some(s) => Some(s.as_str().parse::<u32>()?),
+                            None => None,
+                        },
+                    )),
+                    // If either of the first two are null, we throw an error
+                    _ => return Err(Box::new(ErrorKind::BadVersioningFormat)),
+                }
+            }
+
+            version_tuples.push(entry_versions);
+        }
+
+        //for x in version_tuples.iter() {
+          //  println!("{:#?}", x);
+        //}
+
+        // A quick heuristic: if each of the vectors only has len 1, then we can simply return
+        // this mapping
+        if version_tuples.iter().all(|x| x.len() == 1) {
+            return Ok(version_tuples
+                .iter()
+                .map(|x| Self::stringify_version_tuple(x[0], None))
+                .collect());
+        }
+
+        // Otherwise, we need to do some digging: start off by picking a position of versions.
+        // We assume the plugin maker was competent enough to at least keep their versioning
+        // consistent, but if not we will likely throw an error. With that in mind, if we find
+        // a string of versions that decrements nicely, that's a good candidate for our versions.
+        // We want to throw out strings of versions that stay the same or are inconsistent.
+        let max_len = version_tuples
+            .iter()
+            .fold(0, |acc, x| std::cmp::max(acc, x.len()));
+
+        let mut similar_streaks = vec![0; max_len];
+
+        for i in 0..max_len {
+            let mut version_iter = version_tuples.iter();
+            let mut prev = version_iter.next().unwrap()[i];
+
+            for tuples in version_iter {
+                // It is possible that this entry does not have a tuple for this
+                // column (i). If so, we increment similar_streaks either way,
+                // since not being present is a good sign that it's not the version num
+                if i >= tuples.len() {
+                    similar_streaks[i] += 1;
+                    continue;
+                }
+
+                // See if the tuple was the same as the prev tuple
+                if tuples[i] == prev {
+                    similar_streaks[i] += 1;
+                }
+
+                prev = tuples[i];
+            }
+        }
+
+        // Get the column that had the least similarity/non-appearance
+        let (col, _) = similar_streaks
+            .iter()
+            .enumerate()
+            .min_by(|(_, a), (_, b)| a.cmp(b))
+            .unwrap();
+
+        Ok(version_tuples
+            .iter()
+            .map(|x| Self::stringify_version_tuple(x[col], None))
+            .collect())
+    }
+
+    /// A private function to take a version tuple and stringify it. Can also take a beta version
+    /// param
+    fn stringify_version_tuple(
+        tup: (u32, u32, Option<u32>, Option<u32>),
+        beta: Option<String>,
+    ) -> String {
+        let mut version_code = format!("{}.{}", tup.0, tup.1);
+        version_code = match tup.2 {
+            Some(num) => format!("{}.{}", version_code, num),
+            None => version_code,
+        };
+
+        version_code = match tup.3 {
+            Some(num) => format!("{}.{}", version_code, num),
+            None => version_code,
+        };
+
+        version_code = match beta {
+            Some(num) => format!("{}b{}", version_code, num),
+            None => version_code,
+        };
+
+        version_code
     }
 
     /// Bukkit has another annoyance: their filterable MC version codes are a very odd mapping.
@@ -315,6 +439,7 @@ impl BukkitHTMLPluginParser {
             "CB 1.7.9-R0.1" => "2020709689:473",
             "CB 1.7.2-R0.3" => "2020709689:403",
             "1.7.4" => "2020709689:6391",
+            "CB 1.7.2-R0.3" => "2020709689:403",
             _ => {
                 return Err(ErrorKind::ServerVersionNotFound(
                     self.minecraft_version.clone(),
