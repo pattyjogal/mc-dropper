@@ -13,10 +13,10 @@ fn main() {
         "https://dev.bukkit.org/search?search={}",
         ".listing",
         "div.results-name > a",
-        "1.11".to_string(),
+        "1.8".to_string(),
     );
 
-    match x.enumerate_versions("vault") {
+    match x.enumerate_versions("worldedit") {
         Ok(Some((names, links))) => {
             println!("Here is the version names to link mapping:");
             for (ver, link) in names.iter().zip(links) {
@@ -51,7 +51,7 @@ fn main() {
         Err(e) => panic!("I ran into an error: {}", e),
     };
 
-    match pb.pkg_install("worldedit") {
+    match pb.pkg_add("worldedit") {
         Ok(b) => match b {
             Some((name, version)) => println!("Package {} installed @ version {}!", name, version),
             None => println!("Did not install package"),

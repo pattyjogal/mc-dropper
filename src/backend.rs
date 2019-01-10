@@ -24,7 +24,8 @@ use std::fs::OpenOptions;
 use std::io::{copy, Read, Write};
 use std::path::Path;
 use std::{fmt, fs, io};
-use yaml_rust::YamlLoader;
+use yaml_rust::{YamlLoader, YamlEmitter, Yaml};
+use yaml_rust::yaml::Hash;
 
 const CONFIG_ROOT: &'static str = "./.dropper";
 const CONFIG_PATH: &'static str = "./.dropper/config.yml";
@@ -44,6 +45,8 @@ pub enum ErrorKind {
     ConfigInvalid(String),
     // The config file itself is missing!
     ConfigMissing,
+    // There was some issue with the package list.
+    PkgListInvalid,
 }
 
 impl Error for ErrorKind {}
@@ -58,6 +61,7 @@ impl fmt::Display for ErrorKind {
                 ErrorKind::PkgSpecInvalid(s) => format!("'{}' is not a valid package specifier", s),
                 ErrorKind::ConfigInvalid(s) => format!("param '{}' missing from config", s),
                 ErrorKind::ConfigMissing => "the config file was not found!".to_string(),
+                ErrorKind::PkgListInvalid => "the package list file is incorrectly formatter".to_string(),
             }
         )
     }
@@ -188,7 +192,7 @@ impl<'a> PackageBackend<'a> {
     /// # Errors
     /// * [`ErrorKind::YamlInvalid`](enum.ErrorKind.html#variant.YamlInvalid) - one of the YML files is invalid
     /// * `std::io::ErrorKind::*` - an IO error occured
-    fn read_yaml_file(path: &'static str) -> Result<Option<Vec<yaml_rust::Yaml>>, Box<Error>> {
+    fn read_yaml_file(path: &str) -> Result<Option<Vec<yaml_rust::Yaml>>, Box<Error>> {
         let mut file = match File::open(path) {
             Ok(f) => f,
             Err(e) => {
@@ -220,15 +224,49 @@ impl<'a> PackageBackend<'a> {
     /// * `pkg_specifier` - A string slice that represents the package and version the user wishes
     ///                     to add. It should be in the package specifier format defined above.
     ///
-    /// # Errors
-    /// If the package specifier was invalid, or valid but not found, the Result returned will contain
-    /// an error, and it will need to be handled in whatever frontend is being used.
     pub fn pkg_add(&self, pkg_specifier: &str) -> Result<Option<(String, String)>, Box<Error>> {
-        unimplemented!();
+        // First install the package, and be sure that went well
+        let (name, version) = match self.pkg_install(pkg_specifier)? {
+            Some(tup) => tup,
+            None => return Ok(None),
+        };
+
+        let pkg_yml = match Self::read_yaml_file(PKG_LIST_PATH)? {
+            Some(yml) => yml,
+            // If we couldn't find the YML file, then we create it and start fresh
+            None => {
+                let mut pkg_file = File::create(PKG_LIST_PATH)?;
+                pkg_file.write_all(b"---\n")?;
+                Self::read_yaml_file(PKG_LIST_PATH)?.unwrap()
+            }
+        };
+
+        let doc = &pkg_yml[0];
+        // Add the package to the existing YML
+        let mut hash = match doc {
+            Yaml::Hash(h) => h.clone(),
+            Yaml::Null => Hash::new(),
+            _ => return Err(Box::new(ErrorKind::PkgListInvalid))
+        };
+
+        hash.insert(Yaml::from_str(name.as_str()), Yaml::from_str(version.as_str()));
+
+        // Write the package list YML back
+        let mut pkg_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(PKG_LIST_PATH)?;
+        let mut tmp_string = String::new();
+        let mut emitter = YamlEmitter::new(&mut tmp_string);
+        emitter.dump(&Yaml::Hash(hash)).unwrap();
+        tmp_string = format!("{}\n", tmp_string);
+        pkg_file.write_all(&tmp_string.into_bytes())?;
+
+        Ok(Some((name, version)))
     }
 
     /// The installer function which takes in a package specifier and installs that package to the user's
-    /// plugin directory.
+    /// plugin directory. Can return a tuple of (name, version)
     ///
     /// # Arguments
     ///
