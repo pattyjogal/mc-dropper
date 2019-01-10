@@ -237,7 +237,10 @@ impl PluginFetchable for BukkitHTMLPluginParser {
             },
         );
 
-        Ok(Some((plugin_version_names, plugin_version_links)))
+        // Transform the list of version names to version codes
+        let plugin_versions = Self::extract_version_numbers(plugin_version_names)?;
+
+        Ok(Some((plugin_versions, plugin_version_links)))
     }
 
     fn find_newest_version(
@@ -245,14 +248,14 @@ impl PluginFetchable for BukkitHTMLPluginParser {
         package_name: &str,
     ) -> Result<Option<(String, String)>, Box<Error>> {
         // Get the version numbers
-        let (names, links) = match self.enumerate_versions(package_name)? {
+        let (versions, links) = match self.enumerate_versions(package_name)? {
             Some(tup) => tup,
             None => return Ok(None),
         };
 
         // Return a tuple of the first of each list
         Ok(Some((
-            names.first().cloned().unwrap(),
+            versions.first().cloned().unwrap(),
             links.first().cloned().unwrap(),
         )))
     }
